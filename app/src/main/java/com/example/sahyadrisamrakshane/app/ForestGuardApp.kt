@@ -12,6 +12,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import android.graphics.Bitmap
 import com.example.sahyadrisamrakshane.data.incidentType
 import com.example.sahyadrisamrakshane.data.initialReports
 import com.example.sahyadrisamrakshane.model.IncidentReport
@@ -85,8 +86,8 @@ fun ForestGuardApp() {
                     TypeScreen(draft, onDraft = { draft = it }, onNext = { screen = Screen.Photo })
                 }
                 Screen.Photo -> ReportStepScaffold("Take Photo", 2, { screen = Screen.Type }) {
-                    PhotoScreen {
-                        draft = draft.copy(photoTaken = true)
+                    PhotoScreen(draft = draft) { photo: Bitmap ->
+                        draft = draft.copy(photoTaken = true, photoBitmap = photo)
                         screen = Screen.ConfirmPhoto
                     }
                 }

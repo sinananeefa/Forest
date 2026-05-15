@@ -17,6 +17,7 @@ const tips = [
 const emptyDraft = {
   type: "fire",
   photoTaken: false,
+  photoDataUrl: "",
   latitude: 13.1234,
   longitude: 75.5678,
   accuracy: 15,
@@ -58,6 +59,9 @@ const demoReports = [
 
 const state = loadState();
 const app = document.querySelector("#app");
+let cameraStream = null;
+let cameraActive = false;
+let cameraError = "";
 let toastTimer;
 
 function loadState() {
@@ -81,6 +85,9 @@ function saveState() {
 }
 
 function navigate(screen, extras = {}) {
+  if (state.screen === "photo" && screen !== "photo") {
+    stopCameraPreview();
+  }
   Object.assign(state, extras, { screen });
   saveState();
   render();
@@ -96,6 +103,97 @@ function setTab(tab) {
 function updateDraft(patch) {
   state.draft = { ...state.draft, ...patch };
   saveState();
+}
+
+function stopCameraPreview() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach((track) => track.stop());
+  }
+  cameraStream = null;
+  cameraActive = false;
+  cameraError = "";
+}
+
+async function startCameraPreview() {
+  cameraError = "";
+
+  if (!navigator.mediaDevices?.getUserMedia) {
+    cameraError = "This browser cannot open the camera. Use upload instead.";
+    render();
+    return;
+  }
+
+  stopCameraPreview();
+
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" } },
+      audio: false
+    });
+    cameraActive = true;
+    render();
+    requestAnimationFrame(bindCameraStream);
+  } catch (error) {
+    cameraError = "Camera access denied or unavailable. Use upload instead.";
+    render();
+    toast("Unable to open camera");
+  }
+}
+
+function bindCameraStream() {
+  const video = document.querySelector("#camera-feed");
+  if (video && cameraStream) {
+    video.srcObject = cameraStream;
+    video.play?.().catch(() => {});
+  }
+}
+
+function captureCameraPhoto() {
+  const video = document.querySelector("#camera-feed");
+  if (!video) {
+    toast("Open the camera first.");
+    return;
+  }
+
+  const width = video.videoWidth || 1280;
+  const height = video.videoHeight || 720;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    toast("Camera preview is not ready.");
+    return;
+  }
+
+  context.drawImage(video, 0, 0, width, height);
+  const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+  updateDraft({ photoTaken: true, photoDataUrl: dataUrl });
+  stopCameraPreview();
+  navigate("confirm-photo");
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadPhotoFromFile(file) {
+  if (!file) return;
+
+  try {
+    const dataUrl = await readFileAsDataUrl(file);
+    updateDraft({ photoTaken: true, photoDataUrl: String(dataUrl) });
+    stopCameraPreview();
+    navigate("confirm-photo");
+  } catch (error) {
+    toast("Unable to load selected photo.");
+  }
 }
 
 function toast(message) {
@@ -327,14 +425,25 @@ function selectTypeScreen() {
 }
 
 function photoScreen() {
+  const hasPhoto = Boolean(state.draft.photoDataUrl);
+  const preview = hasPhoto
+    ? `<div class="photo-preview has-photo"><img class="preview-media" src="${escapeAttr(state.draft.photoDataUrl)}" alt="Selected evidence photo"></div>`
+    : cameraActive
+      ? `<div class="camera-preview camera-live"><video id="camera-feed" autoplay playsinline muted></video></div>`
+      : `<div class="camera-preview"><strong>Camera preview</strong><p class="muted" style="color:rgba(255,255,255,.9);margin:8px 0 0">Open the camera or upload from gallery.</p></div>`;
+  const actionLabel = cameraActive ? "Capture Photo" : "Open Camera";
+
   return reportStepLayout(2, "Take Photo", `
     <h2>Take a clear photo</h2>
     <p class="muted">Capture visible evidence, while staying at a safe distance.</p>
-    <div class="camera-preview"><strong>Camera preview simulation</strong></div>
+    ${preview}
+    ${cameraError ? `<p class="camera-error">${escapeHtml(cameraError)}</p>` : ""}
     <div style="height:16px"></div>
-    <button class="primary" data-action="capture-photo">Capture Photo</button>
+    <button class="primary" data-action="${cameraActive ? "capture-photo" : "open-camera"}">${actionLabel}</button>
     <div style="height:12px"></div>
-    <button class="secondary" data-action="capture-photo">Upload from Gallery</button>
+    ${cameraActive ? `<button class="secondary" data-action="cancel-camera">Cancel Camera</button><div style="height:12px"></div>` : ""}
+    <button class="secondary" data-action="upload-photo">Upload from Gallery</button>
+    <input id="gallery-upload" type="file" accept="image/*" hidden>
   `);
 }
 
@@ -342,7 +451,7 @@ function confirmPhotoScreen() {
   return reportStepLayout(3, "Confirm Photo", `
     <h2>Photo looks good?</h2>
     <p class="muted">Evidence is stamped with location and time before submission.</p>
-    <div class="photo-preview"></div>
+    <div class="photo-preview ${state.draft.photoDataUrl ? "has-photo" : ""}">${state.draft.photoDataUrl ? `<img class="preview-media" src="${escapeAttr(state.draft.photoDataUrl)}" alt="Captured evidence photo">` : ""}</div>
     <div style="height:12px"></div>
     <div class="coords">
       Latitude: ${state.draft.latitude.toFixed(4)} N<br>
@@ -541,6 +650,11 @@ function render() {
 
   app.innerHTML = html;
   bindLiveInputs();
+  bindPhotoInputs();
+
+  if (cameraActive) {
+    requestAnimationFrame(bindCameraStream);
+  }
 }
 
 function bindLiveInputs() {
@@ -560,6 +674,17 @@ function bindLiveInputs() {
   }
   if (anonymous) {
     anonymous.addEventListener("change", (event) => updateDraft({ anonymous: event.target.checked }));
+  }
+}
+
+function bindPhotoInputs() {
+  const galleryUpload = document.querySelector("#gallery-upload");
+  if (galleryUpload) {
+    galleryUpload.addEventListener("change", async (event) => {
+      const file = event.target.files?.[0];
+      event.target.value = "";
+      await uploadPhotoFromFile(file);
+    });
   }
 }
 
@@ -613,9 +738,18 @@ document.addEventListener("click", async (event) => {
     updateDraft({ type: actionNode.dataset.type });
     render();
   }
+  if (action === "open-camera") {
+    startCameraPreview();
+  }
   if (action === "capture-photo") {
-    updateDraft({ photoTaken: true });
-    navigate("confirm-photo");
+    captureCameraPhoto();
+  }
+  if (action === "upload-photo") {
+    document.querySelector("#gallery-upload")?.click();
+  }
+  if (action === "cancel-camera") {
+    stopCameraPreview();
+    render();
   }
   if (action === "retake-photo" || action === "edit-photo") navigate("photo");
   if (action === "refresh-location") {
@@ -672,7 +806,8 @@ function submitReport() {
     latitude: state.draft.latitude,
     longitude: state.draft.longitude,
     accuracy: state.draft.accuracy,
-    anonymous: state.draft.anonymous
+    anonymous: state.draft.anonymous,
+    photoDataUrl: state.draft.photoDataUrl
   };
 
   state.reports.unshift(report);
@@ -698,6 +833,8 @@ window.addEventListener("online", () => {
     render();
   }
 });
+
+window.addEventListener("beforeunload", stopCameraPreview);
 
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (char) => ({

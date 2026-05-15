@@ -1,5 +1,7 @@
 package com.example.sahyadrisamrakshane.model
 
+import android.graphics.Bitmap
+
 enum class Screen {
     Login, Dashboard, Reports, Tips, Officer,
     Type, Photo, ConfirmPhoto, Location, Details, Review, Confirmation, Status
@@ -15,6 +17,7 @@ data class IncidentType(
 data class ReportDraft(
     val type: String = "fire",
     val photoTaken: Boolean = false,
+    val photoBitmap: Bitmap? = null,
     val latitude: Double = 13.1234,
     val longitude: Double = 75.5678,
     val accuracy: Int = 15,

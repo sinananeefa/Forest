@@ -1,5 +1,6 @@
 package com.example.sahyadrisamrakshane.ui.components
 
+import android.graphics.Bitmap
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -14,10 +15,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -37,19 +40,27 @@ fun CameraPreview(modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun PhotoPreview(modifier: Modifier = Modifier) {
+fun PhotoPreview(photoBitmap: Bitmap? = null, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier.fillMaxWidth().height(240.dp).background(
             brush = Brush.verticalGradient(listOf(LightGreen, PaleGreen, ForestGreen)),
             shape = RoundedCornerShape(8.dp)
         )
     ) {
-        Text(
-            "Evidence preview",
-            color = Color.White,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)
-        )
+        if (photoBitmap != null) {
+            Image(
+                bitmap = photoBitmap.asImageBitmap(),
+                contentDescription = "Evidence preview",
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            Text(
+                "Evidence preview",
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)
+            )
+        }
     }
 }
 

@@ -3,6 +3,7 @@ package com.example.sahyadrisamrakshane.ui.screens
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -15,11 +16,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,19 +71,45 @@ fun TypeScreen(draft: ReportDraft, onDraft: (ReportDraft) -> Unit, onNext: () ->
 }
 
 @Composable
-fun PhotoScreen(onCapture: () -> Unit) {
+fun PhotoScreen(draft: ReportDraft, onCapture: (Bitmap) -> Unit) {
     val context = LocalContext.current
-    var capturedBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    var showSourcePicker by remember { mutableStateOf(false) }
+    var capturedBitmap by remember(draft.photoBitmap) { mutableStateOf(draft.photoBitmap) }
+
+    fun savePhoto(bitmap: Bitmap) {
+        capturedBitmap = bitmap
+        onCapture(bitmap)
+    }
+
+    fun loadBitmapFromUri(uri: android.net.Uri): Bitmap? {
+        return try {
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                BitmapFactory.decodeStream(inputStream)
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
 
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicturePreview()
     ) { bitmap ->
         if (bitmap != null) {
-            capturedBitmap = bitmap
-            onCapture() // marks photo captured in your flow
+            savePhoto(bitmap)
         } else {
             Toast.makeText(context, "Camera closed without photo", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            val bitmap = loadBitmapFromUri(uri)
+            if (bitmap != null) {
+                savePhoto(bitmap)
+            } else {
+                Toast.makeText(context, "Unable to load selected photo", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -110,67 +135,31 @@ fun PhotoScreen(onCapture: () -> Unit) {
                 modifier = Modifier.fillMaxWidth().height(240.dp).background(Color.Black, RoundedCornerShape(8.dp))
             )
             Spacer(Modifier.height(12.dp))
-            SecondaryButton(
-                text = "Retake Photo",
-                onClick = { showSourcePicker = true }
-            )
         } else {
             CameraPreview()
-            Spacer(Modifier.height(16.dp))
-            PrimaryButton(
-                text = "Capture Photo",
-                onClick = {
-                    val granted = ContextCompat.checkSelfPermission(
-                        context,
-                        Manifest.permission.CAMERA
-                    ) == PackageManager.PERMISSION_GRANTED
-
-                    if (granted) {
-                        cameraLauncher.launch(null)
-                    } else {
-                        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                    }
-                }
-            )
         }
 
+        Spacer(Modifier.height(16.dp))
+        PrimaryButton(
+            text = if (capturedBitmap == null) "Capture Photo" else "Retake Photo",
+            onClick = {
+                val granted = ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.CAMERA
+                ) == PackageManager.PERMISSION_GRANTED
+
+                if (granted) {
+                    cameraLauncher.launch(null)
+                } else {
+                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                }
+            }
+        )
         Spacer(Modifier.height(12.dp))
         SecondaryButton(
             text = "Upload from Gallery",
             onClick = {
-                Toast.makeText(context, "Gallery feature coming soon", Toast.LENGTH_SHORT).show()
-            }
-        )
-    }
-
-    if (showSourcePicker) {
-        AlertDialog(
-            onDismissRequest = { showSourcePicker = false },
-            title = { Text("Choose Photo Source") },
-            text = { Text("Use camera to capture incident evidence.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showSourcePicker = false
-                        val granted = ContextCompat.checkSelfPermission(
-                            context,
-                            Manifest.permission.CAMERA
-                        ) == PackageManager.PERMISSION_GRANTED
-
-                        if (granted) {
-                            cameraLauncher.launch(null)
-                        } else {
-                            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                        }
-                    }
-                ) {
-                    Text("Camera")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSourcePicker = false }) {
-                    Text("Cancel")
-                }
+                galleryLauncher.launch("image/*")
             }
         )
     }
@@ -182,7 +171,7 @@ fun ConfirmPhotoScreen(draft: ReportDraft, onNext: () -> Unit, onRetake: () -> U
         Text("Photo looks good?", fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Text("Evidence is stamped with location and time before submission.", color = MediumGrey)
         Spacer(Modifier.height(16.dp))
-        PhotoPreview()
+        PhotoPreview(draft.photoBitmap)
         Spacer(Modifier.height(12.dp))
         CoordinateCard(draft)
         Spacer(Modifier.height(16.dp))
