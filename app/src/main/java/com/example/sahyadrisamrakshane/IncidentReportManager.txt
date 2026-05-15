@@ -1,0 +1,25 @@
+app/src/main/java/com/example/sahyadrisamrakshane/
+├─ MainActivity.kt
+├─ app/
+│  └─ ForestGuardApp.kt
+├─ model/
+│  └─ AppModels.kt
+├─ data/
+│  └─ IncidentSeedData.kt
+├─ ui/
+│  ├─ theme/
+│  │  └─ AppColors.kt
+│  ├─ screens/
+│  │  ├─ AuthScreens.kt
+│  │  ├─ HomeScreens.kt
+│  │  ├─ ReportFlowScreens.kt
+│  │  └─ StatusScreens.kt
+│  └─ components/
+│     ├─ Scaffolds.kt
+│     ├─ Cards.kt
+│     ├─ Buttons.kt
+│     ├─ Inputs.kt
+│     ├─ MapCameraWidgets.kt
+│     └─ CommonWidgets.kt
+└─ util/
+   └─ Formatters.kt
